@@ -1,5 +1,5 @@
-import matplotlib
-matplotlib.use('agg')
+#import matplotlib
+#matplotlib.use('agg')
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
@@ -15,7 +15,9 @@ import collections
 import math
 import seaborn as sns
 import libplot
-import libsparse
+from libsparse.libsparse import SparseDataFrame
+from numpy import ndarray
+import pandas as pd
 
 s=80
 alpha=0.8
@@ -49,7 +51,7 @@ def pca(data, n=50, exclude=[], mode='random'):
     """
   
     # remove rows containing all zeros
-    data = remove_empty_rows(data) # data[(data.T != 0).any()]
+    #data = remove_empty_rows(data) # data[(data.T != 0).any()]
   
     print('New size {}'.format(data.shape))
   
@@ -74,7 +76,7 @@ def pca(data, n=50, exclude=[], mode='random'):
   
     # Perform PCA
   
-    if isinstance(data, libsparse.SparseDataFrame):
+    if isinstance(data, SparseDataFrame):
         print('PCA sparse mode')
         pca = TruncatedSVD(n_components=n, random_state=PCA_RANDOM_STATE)
     elif mode == 'full':
@@ -85,7 +87,7 @@ def pca(data, n=50, exclude=[], mode='random'):
         # Use the default random, faster solver
         pca = PCA(n_components=n, random_state=PCA_RANDOM_STATE)
     
-    if isinstance(data, libsparse.SparseDataFrame):
+    if isinstance(data, SparseDataFrame):
         pca_results = pca.fit_transform(data.matrix) #libsparse.SparseDataFrame(pca.fit_transform(data.matrix), data.index, data.columns)
     else:
         pca_results = pca.fit_transform(data) #data_std) #datat)
@@ -650,14 +652,26 @@ def log2(data):
 def tpm(data):
   return data / data.sum(axis=0) * 1000000
 
-def remove_empty_rows(data):
-    print(type(data))
-    
-    if isinstance(data, libsparse.SparseDataFrame):
-        return data.remove_empty_rows()
+
+
+def remove_empty_cols(data):
+    if isinstance(data, SparseDataFrame):
+        return data.remove_empty_cols()
     else:
-        return data.loc[(data != 0).any(1)]
-  
+        if isinstance(data, ndarray):
+            data = pd.DataFrame(data)
+            
+        #return data.loc[(data != 0).any(1)]
+        ret = data.loc[:, data.sum(axis=0) != 0]
+        
+        return ret
+    
+def remove_empty_rows(data):
+    return remove_empty_cols(data.T).T
+    
+def remove_empty_cells(data):
+    return remove_empty_cols(remove_empty_rows(data))
+    
   
 def format_axes(ax, title="t-SNE", d1=1, d2=2, subtitle1="", subtitle2=""):
     if subtitle1 != "":
@@ -679,14 +693,15 @@ def format_simple_axes(ax, title="t-SNE", d1=1, d2=2, subtitle1="", subtitle2=""
     xytext=(-2, 0),
     xycoords='axes pixels',
     textcoords='axes pixels',
-    arrowprops=dict(arrowstyle='->', facecolor='red'))
+    arrowprops=dict(arrowstyle='->', facecolor='black'), zorder=1000)
+  
   
   ax.annotate('',
     xy=(0, 40),  # theta, radius
     xytext=(0, -2),
     xycoords='axes pixels',
     textcoords='axes pixels',
-    arrowprops=dict(arrowstyle='->', facecolor='black'))
+    arrowprops=dict(arrowstyle='->', facecolor='black'), zorder=1000)
   
   if subtitle1 != "":
     ax.text(0, -0.04, '{} {} ({})'.format(title, d1, subtitle1), transform=ax.transAxes)
@@ -940,7 +955,17 @@ def correlation_plot(x, y, clusters, name, marker='o', s=MARKER_SIZE, xlabel='',
     return fig, ax
 
 
-def scatter_clusters(x, y, clusters, marker='o', s=libplot.MARKER_SIZE, alpha=libplot.ALPHA, c=None, edgecolors='none', fig=None, ax=None):
+def scatter_clusters(x, \
+                     y, \
+                     clusters, \
+                     marker='o', \
+                     s=libplot.MARKER_SIZE, \
+                     alpha=libplot.ALPHA, \
+                     c=None, \
+                     edgecolors='none', \
+                     prefix = '', \
+                     fig=None, \
+                     ax=None):
     """
     Create a tsne plot without the formatting
     """
@@ -957,12 +982,11 @@ def scatter_clusters(x, y, clusters, marker='o', s=libplot.MARKER_SIZE, alpha=li
     for i in range(0, len(ids)):
         l = ids[i]
         
-        print('Label {} {}'.format(l, c[i]))
         indices = np.where(clusters['Cluster'] == l)[0]
         
         n = len(indices)
         
-        label = 'C{} ({:,})'.format(l, n)
+        label = '{}{} ({:,})'.format(prefix, l, n)
     
         x1 = x[indices] #np.take(x, indices)
         y1 = y[indices] #np.take(y, indices)
