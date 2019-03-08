@@ -497,7 +497,7 @@ def label_indices(labels, l):
 #  return [colors, mcolors.ListedColormap(colors, name='gmm')]
 
 
-def colors():
+def get_colors():
     l = list(plt.cm.tab20.colors)
   
     ret = []
@@ -523,11 +523,11 @@ def colors():
     #ret.extend(list(plt.cm.Dark2.colors))
     #ret.extend(list(plt.cm.Set2.colors))
   
-    return ret
+    return ret #np.array(ret)
 
 
 def colormap(n=-1):
-    c = colors()
+    c = get_colors()
     
     if n > 0:
         c = c[0:n]
@@ -923,7 +923,7 @@ def correlation_plot(x, y, clusters, name, marker='o', s=MARKER_SIZE, xlabel='',
     Create a tsne plot without the formatting
     """
     
-    c = colors()
+    c = get_colors()
   
     if ax is None:
         fig, ax = libplot.new_fig()
@@ -958,10 +958,10 @@ def correlation_plot(x, y, clusters, name, marker='o', s=MARKER_SIZE, xlabel='',
 def scatter_clusters(x, \
                      y, \
                      clusters, \
-                     marker='o', \
+                     markers='o', \
                      s=libplot.MARKER_SIZE, \
                      alpha=libplot.ALPHA, \
-                     c=None, \
+                     colors=None, \
                      edgecolors='none', \
                      prefix = '', \
                      fig=None, \
@@ -973,30 +973,60 @@ def scatter_clusters(x, \
     if ax is None:
         fig, ax = libplot.new_fig()
     
-    if c is None:
-        c = colors()
+    if colors is None:
+        colors = get_colors()
         
     
     ids = list(sorted(set(clusters['Cluster'])))
       
     for i in range(0, len(ids)):
-        l = ids[i]
+        c = ids[i]
         
-        indices = np.where(clusters['Cluster'] == l)[0]
+        indices = np.where(clusters['Cluster'] == c)[0]
         
         n = len(indices)
         
-        label = '{}{} ({:,})'.format(prefix, l, n)
+        label = '{}{} ({:,})'.format(prefix, c, n)
     
         x1 = x[indices] #np.take(x, indices)
         y1 = y[indices] #np.take(y, indices)
+        
+        if isinstance(colors, dict):
+            color = colors[c]
+        elif isinstance(colors, list):
+            color = colors[i]
+        else:
+            color = libplot.BLACK_RGB
+        
+        if isinstance(markers, dict) and c in markers:
+            marker = markers[c]
+            #edgecolor = color
+            #color = libplot.get_tint(color, 0.9)
+            #edgecolor = 'white' #libplot.get_tint(color, 0.9)
+            #alpha=1
+            edgecolor = edgecolors
+        else:
+            if isinstance(markers, str):
+                marker = markers
+            else:
+                marker = 'o'
+            
+            if isinstance(edgecolors, dict) and c in edgecolors:
+                edgecolor = edgecolors[c]
+            else:
+                edgecolor = edgecolors
+            
           
-        ax.scatter(x1, y1, color=c[i], edgecolors=edgecolors, s=s, marker=marker, alpha=alpha, label=label)
+        ax.scatter(x1, y1, color=color, edgecolors=edgecolor, s=s, marker=marker, alpha=alpha, label=label)
 
     return fig, ax
 
 
-def cluster_colors(clusters, c=colors()):
+def cluster_colors(clusters, colors=None):
+    
+    if colors is None:
+        colors = get_colors()
+        
     ret = []
     
     ids = list(sorted(set(clusters['Cluster'])))
@@ -1007,6 +1037,6 @@ def cluster_colors(clusters, c=colors()):
         cmap[ids[i]] = i
     
     for i in range(0, clusters.shape[0]):
-        ret.append(c[cmap[clusters['Cluster'][i]]])
+        ret.append(colors[cmap[clusters['Cluster'][i]]])
         
     return ret
