@@ -41,6 +41,8 @@ ALPHA=0.8
 C3_COLORS = ['tomato', 'mediumseagreen', 'royalblue']
 EDGE_COLORS = ['darkred', 'darkgreen', 'darkblue']
 
+CLUSTER_101_COLOR = (0.3, 0.3, 0.3)
+
 
 PCA_RANDOM_STATE = 0
 
@@ -75,6 +77,12 @@ def pca(data, n=50, exclude=[], mode='random'):
     print('tranpose {}'.format(data.shape))
   
     # Perform PCA
+    
+    print('hmmw', n, data.shape[0])
+    
+    n = min(data.shape[0], n)
+    
+    
   
     if isinstance(data, SparseDataFrame):
         print('PCA sparse mode')
@@ -498,27 +506,48 @@ def label_indices(labels, l):
 
 
 def get_colors():
+    """
+    Make a list of usable colors and include 101 as an entry for
+    questionable clusters
+    Unassigned colors between 0 and 101 are black
+    """
+    ret = [(0, 0, 0)] * 102
+    
     l = list(plt.cm.tab20.colors)
   
-    ret = []
+    c = 0
   
     for i in range(0, 20, 2):
         # skip gray
         if i == 14:
             continue
       
-        ret.append(l[i])
+        ret[c] = l[i]
+        c += 1
         
     for i in range(0, 20, 2):
         if i == 14:
             continue
       
-        ret.append(l[i + 1])    
+        ret[c] = l[i + 1]
+        c += 1
 
   
     #ret = list(plt.cm.tab10.colors)
     #ret.extend(list(plt.cm.Set3.colors))
-    ret.extend(list(plt.cm.Dark2.colors))
+    for color in list(plt.cm.Dark2.colors):
+        ret[c] = color
+        c += 1
+
+    for color in list(plt.cm.Set3.colors):
+        ret[c] = color
+        c += 1    
+    
+    for color in list(plt.cm.Pastel1.colors):
+        ret[c] = color
+        c += 1
+    
+    ret[101] = CLUSTER_101_COLOR
   
     #ret.extend(list(plt.cm.Dark2.colors))
     #ret.extend(list(plt.cm.Set2.colors))
@@ -955,19 +984,37 @@ def correlation_plot(x, y, clusters, name, marker='o', s=MARKER_SIZE, xlabel='',
     return fig, ax
 
 
-def scatter_clusters(x, \
-                     y, \
-                     clusters, \
-                     markers='o', \
-                     s=libplot.MARKER_SIZE, \
-                     alpha=libplot.ALPHA, \
-                     colors=None, \
-                     edgecolors='none', \
-                     prefix = '', \
-                     fig=None, \
-                     ax=None):
+def scatter_clusters(x,
+                     y, 
+                     clusters,
+                     markers='o',
+                     s=libplot.MARKER_SIZE,
+                     alpha=libplot.ALPHA,
+                     colors='none',
+                     edgecolors='none',
+                     linewidth=1,
+                     prefix = '',
+                     mode='plot',
+                     fig=None,
+                     ax=None,
+                     sort=True,
+                     cluster_order=None):
     """
-    Create a tsne plot without the formatting
+    Create a plot of clusters.
+    
+    Parameters
+    ----------
+    x : array
+        x coordinates
+    y : array
+        y coordinates
+    mode : str, optional
+        Specify how to render plot. 
+        'plot' - conventional graphics plot
+        'text' - use markers to render text at locations using cluster color
+        and marker to set the text color and text respectively. Thus a
+        blue cluster with marker '1' will have all its points rendered as
+        blue '1's rather than points.
     """
     
     if ax is None:
@@ -975,12 +1022,22 @@ def scatter_clusters(x, \
     
     if colors is None:
         colors = get_colors()
-        
     
-    ids = list(sorted(set(clusters['Cluster'])))
+    if cluster_order is None:    
+        if sort:
+            cluster_order = list(sorted(set(clusters['Cluster'])))
+        else:
+            cluster_order = []
+            used = set()
+            
+            for id in clusters['Cluster']:
+                if id not in used:
+                    cluster_order.append(id)
+                    used.add(id)
+            
       
-    for i in range(0, len(ids)):
-        c = ids[i]
+    for i in range(0, len(cluster_order)):
+        c = cluster_order[i]
         
         indices = np.where(clusters['Cluster'] == c)[0]
         
@@ -991,33 +1048,55 @@ def scatter_clusters(x, \
         x1 = x[indices] #np.take(x, indices)
         y1 = y[indices] #np.take(y, indices)
         
+
+        
         if isinstance(colors, dict):
             color = colors[c]
         elif isinstance(colors, list):
-            color = colors[i]
+            if c == 101:
+                # special case where 101 is colored separately
+                color = CLUSTER_101_COLOR
+            else:
+                color = colors[i]
         else:
-            color = libplot.BLACK_RGB
+            # fixed color
+            color = colors
+            
+        print('scatter', c, color)
         
         if isinstance(markers, dict) and c in markers:
             marker = markers[c]
-            #edgecolor = color
-            #color = libplot.get_tint(color, 0.9)
-            #edgecolor = 'white' #libplot.get_tint(color, 0.9)
-            #alpha=1
-            edgecolor = edgecolors
         else:
-            if isinstance(markers, str):
-                marker = markers
-            else:
-                marker = 'o'
+            marker = markers
             
-            if isinstance(edgecolors, dict) and c in edgecolors:
-                edgecolor = edgecolors[c]
-            else:
-                edgecolor = edgecolors
+        if isinstance(edgecolors, dict) and c in edgecolors:
+            edgecolor = edgecolors[c]
+        else:
+            edgecolor = edgecolors
+        
+        if mode == 'text':
+            ax.scatter(x1, y1, color='white', s=s, marker=marker, alpha=alpha, label=label)
             
-          
-        ax.scatter(x1, y1, color=color, edgecolors=edgecolor, s=s, marker=marker, alpha=alpha, label=label)
+            for li in range(0, x1.size):
+                xl = x1[li]
+                yl = y1[li]
+                
+                if marker == 's':
+                    ax.text(xl, yl, '1', color=edgecolor)
+                elif marker == '^':
+                    ax.text(xl, yl, '2', color=edgecolor)
+                elif marker == 'v':
+                    ax.text(xl, yl, '3', color=edgecolor)
+        else:
+            ax.scatter(x1, 
+                       y1, 
+                       color=color, 
+                       edgecolors=edgecolor,
+                       linewidths=linewidth,
+                       s=s, 
+                       marker=marker, 
+                       alpha=alpha, 
+                       label=label)
 
     return fig, ax
 
